@@ -1,11 +1,46 @@
+from multiprocessing import Process, queues
 import multiprocessing
 from Encoder import *
 from Decoder import *
 from Simulator import *
 import timeit
 import time
-def editDist(strX='101', strY='101'):
-    #x must be the shorter one
+
+def test():
+    orgdata='0110000000000000'
+    deldata='110000000000000'
+    UnitTest(orgdata, deldata)
+def main():
+    bit16test()
+def bit16test():
+    '''Run test on all 16-bit numbers where each number if repeated 16 times for each position
+    deletion. Output: total number of fail and success decoding.'''
+    results = multiprocessing.Queue()
+    pp=[]
+    frm=0; to=(2**16); jump=to//8
+    count = success = fail = 0
+    stime=time.time()
+    for i in range(frm, to, jump):
+        print('started ',i,'to',i+jump)
+        p = Process(target=StressTestMulti, args=(i,i+jump,count, results))
+        count+=1
+        pp.append(p)
+        p.start()
+    for p in pp:
+        p.join()
+    while count>0:
+        result= results.get()
+        success+=result[0]
+        fail+=result[1]
+        count-=1       
+    ttime=time.time()-stime
+    print('Total success:',success,'Total failure:',fail, 'Total time:',ttime)
+def editDist(strX, strY):
+    '''Check the Lavenshtein distance of the two strings.
+    If distance is greater than number of deletions -> False
+                                          otherwise -> True'''
+    if len(strX) > len(strY):
+        strX, strY = strY, strX
     dels=int(math.fabs(len(strX)-len(strY)))
     strX=' '+strX
     strY=' '+strY
@@ -25,9 +60,10 @@ def editDist(strX='101', strY='101'):
                 minVal=min(t[i][j-1],t[i-1][j])
                 t[i][j]=minVal+1  
             if t[i][j]<=dels: donotreturn=True
-        if donotreturn==False: return False
+        if donotreturn==False and t[i][0]>dels: return False
     return True
 def gfCheck(data, blockLength, gf):
+    '''Check if each element of data is within the range val < 2^ blockLength'''
     for val in data:
         if val >= 2**blockLength and val < gf:
             print(data)
@@ -41,110 +77,56 @@ def UnitTest(orgdata, deldata):
     This test takes a while'''
     mlen=len(orgdata)
     dels=mlen-len(deldata)
-    success=0
-    fail=0
-    dup=0
-    conflix=0
+    success = fail = 0
     en=Encoder(mlen, dels+1)
     de=Decoder(mlen, dels+1)
     si=Simulator(mlen, dels)
-    print(en)
+    #print(en)
     data=si.breakString(orgdata)
     data=si.binString2int(data)
+    print()
     print('data int', data)
     parity=np.matrix(en.paritize(np.matrix([data])))
-    print('parity: ', parity)
+    #print('parity: ', parity)
     dataIntCases, dataBinStringCases=si.getCases(deldata)
+    caught=False
     recoveredData=''
     for idx in range(len(dataIntCases)):
-        print('case: ',dataIntCases[idx])
-        data=np.matrix(dataIntCases[idx])
-        decodedData, valid =de.decode(data, parity)
-        print('decode: ', decodedData, valid)
-        if valid:
-            temp = si.int2binString(decodedData)
-            if temp==recoveredData:
-                dup+=1
-            elif len(recoveredData)==0:
-                recoveredData = temp
-                print('new rec:, ', decodedData)
-            else:
-                conflix+=1
-                if editDist(deldata,temp):
-                    recoveredData = temp
-                    print('new rec:, ', decodedData)
+        if gfCheck(dataIntCases[idx], si.blockLength, si.gf):
+            data=np.matrix(dataIntCases[idx])
+            decodedData, valid =de.decode(data, parity)
+            print('Case', decodedData, valid)
+            if valid:
+                temp = si.int2binString(decodedData)
+                if editDist(deldata,temp) == True:
+                    if len(recoveredData)==0:
+                        recoveredData = temp
+                    elif temp!=recoveredData:
+                        caught=True
+                        break #fail
+                    elif temp==recoveredData: pass
+                    else: print('what?')
+                else:
+                    print('Failed distance check')
+        else:
+            print('failed gf check')
     if recoveredData == orgdata:
         success+=1
-    else: 
+    else:
         fail+=1
-        print()
-        print('org',orgdata)
-        print('rec',recoveredData)
-        print('del',deldata)
-    print('Success:',success,'fail:',fail,'dup:',dup,'conflict:',conflix,)
-
-orgdata='0010000100001000111'
-deldata='0010001000000111'
-#UnitTest(orgdata, deldata)
-
-def StressTestOne():
+        if caught==False:
+            print()
+            print('org',orgdata)
+            print('rec',recoveredData)
+            print('del',deldata)
+        caught=False
+    print('Success:',success,'fail:',fail)
+def StressTestMulti(frm, to, name, results):
     '''Test on all 16-bit binary number with
     one deletion occuring at any posision.
     This test takes a while'''
-    dels=1
-    mlen=16
-    success=0
-    fail=0
-    dup=0
-    conflix=0
-    en=Encoder(mlen, dels+1)
-    de=Decoder(mlen, dels+1)
-    si=Simulator(mlen, dels)
-    for dataInt in range(2**mlen):
-        for didx in range(mlen):
-            orgdata= en.genMsg(dataInt,mlen)
-            deldata=si.pop(orgdata,didx)
-            data=si.breakString(orgdata)
-            data=si.binString2int(data)
-            parity=np.matrix(en.paritize(np.matrix([data])))
-            dataIntCases, dataBinStringCases=si.getCases(deldata)
-            recoveredData=''
-            isFail=False
-            for idx in range(len(dataIntCases)):
-                if gfCheck(dataIntCases[idx], si.blockLength, si.gf):
-                    data=np.matrix(dataIntCases[idx])
-                    decodedData, valid =de.decode(data, parity)
-                    if valid:
-                        temp = si.int2binString(decodedData)
-                        if len(recoveredData)==0 and editDist(deldata,temp) == True:
-                            recoveredData = temp
-                        else:
-                            if temp==recoveredData:
-                                dup+=1
-                            else:
-                                print('Success:',success,'fail:',fail,'dup:',dup)
-                                isFail=True
-                                break
-            if isFail:
-                fail+=1
-            else:
-                if recoveredData == orgdata:
-                    success+=1
-                else: 
-                    print()
-                    print('org',orgdata)
-                    print('rec',recoveredData)
-                    print('del',deldata)
-def StressTestMulti(frm, to):
-    '''Test on all 16-bit binary number with
-    one deletion occuring at any posision.
-    This test takes a while'''
-    dels=1
-    mlen=16
-    success=0
-    fail=0
-    dup=0
-    conflix=0
+    dels=1; mlen=16; success=0; fail=0
+    miscaught=0
     en=Encoder(mlen, dels+1)
     de=Decoder(mlen, dels+1)
     si=Simulator(mlen, dels)
@@ -157,50 +139,31 @@ def StressTestMulti(frm, to):
             parity=np.matrix(en.paritize(np.matrix([data])))
             dataIntCases, dataBinStringCases=si.getCases(deldata)
             recoveredData=''
-            isFail=False
+            isFailed=False
             for idx in range(len(dataIntCases)):
                 if gfCheck(dataIntCases[idx], si.blockLength, si.gf):
                     data=np.matrix(dataIntCases[idx])
                     decodedData, valid =de.decode(data, parity)
                     if valid:
                         temp = si.int2binString(decodedData)
-                        if len(recoveredData)==0 and editDist(deldata,temp) == True:
-                            recoveredData = temp
+                        if editDist(deldata,temp) == True:
+                            if len(recoveredData)==0:
+                                recoveredData = temp
+                            elif temp!=recoveredData:
+                                isFailed=True
+                                break #fail
+                            elif temp==recoveredData: pass
+                            else: print('what?')
                         else:
-                            if temp==recoveredData:
-                                dup+=1
-                            else:
-                                print('Success:',success,'fail:',fail,'dup:',dup)
-                                isFail=True
-                                break
-            if isFail:
+                            pass
+                else:
+                    print('failed gf check')
+            if isFailed:
                 fail+=1
+            elif recoveredData == orgdata:
+                success+=1
             else:
-                if recoveredData == orgdata:
-                    success+=1
-                else: 
-                    print()
-                    print('org',orgdata)
-                    print('rec',recoveredData)
-                    print('del',deldata)
-#StressTestOne()
-#print(timeit.timeit(editDist,number=100000))
-from multiprocessing import Process
-import os
-
-def f(name):
-    while True:
-        print('hello', name)
-
+                print('Something happened!')
+    results.put((success, fail))
 if __name__ == '__main__':
-    pp=[]
-    frm=0
-    to=(2**16)
-    jump=to//8
-    for i in range(frm,to,jump):
-        print('started ',i,'to',i+jump)
-        p = Process(target=StressTestMulti, args=(i,i+jump))
-        pp.append(p)
-        p.start()
-    for p in pp:
-        p.joint()
+    main()
