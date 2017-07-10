@@ -3,9 +3,10 @@ import math
 class Encoder:
     def __init__(self, mlen, numEn):
         self.numBlock, self.blockLength = self.getDem(mlen)
-        self.enVec=self.getEnVec(numEn, self.numBlock)
         self.gf=self.nextPrime(2**self.blockLength)
+        self.enVec=self.getEnVec(numEn, self.numBlock)%self.gf
         
+      
     def isPrime(self, num):
          if num < 2: return False
          for i in range(2, int(math.sqrt(num)) + 1):
@@ -20,9 +21,12 @@ class Encoder:
         blockLength=int(math.ceil(math.log(k,2)))#round up
         numBlock=int(math.ceil(k/blockLength))#round up
         return numBlock, blockLength
-    def getEnVec(self, numVec, length):
+    @staticmethod
+    def getEnVec(numVec, length):
+        '''the last rows are zeros'''
         vectors=list()
-        vectors = np.reshape([i**x for i in range(1,numVec+1) for x in range(length)],(numVec,length))
+        vectors = np.reshape([i**x for i in range(1,numVec+1) for x in range(length+numVec)],(numVec,length+numVec))
+        vectors[:,length:]=0
         return np.transpose(vectors)
     
     def genMsg(self, dataInt, mLen):
@@ -31,8 +35,7 @@ class Encoder:
         orim = bin(dataInt)[2:].zfill(mLen)
         return orim
     def paritize(self, data):
-        return np.dot(data, self.enVec)%self.gf
-    
+        return np.dot(data, self.enVec[:len(data),:])%self.gf
     def breakString(self, inputString, blockLengths):
         if type(blockLengths) == int:
             output=[inputString[i:i+blockLengths] for i in range(0, len(inputString), blockLengths)]
@@ -52,13 +55,6 @@ class Encoder:
             return int(binStrings,2)
         elif type(binStrings)==list:
             return [int(binString,2) for binString in binStrings]
-    def int2binString(self, npbinString, blockLength, lastLen=0):
-        binString=''
-        for item in np.nditer(npbinString[0]):
-            binString+=bin(int(item))[2:].zfill(blockLength)
-        if lastLen != 0: binString=binString[:-blockLength]+binString[-lastLen:]
-        return binString
-
     def __str__(self):
         return ('Decoding matrix: \n'+str(self.enVec)+
                 '\nnumBlock: ' + str(self.numBlock) + 

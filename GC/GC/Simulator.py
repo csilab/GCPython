@@ -15,22 +15,6 @@ class Simulator:
     def nextPrime(self, num):
         while self.isPrime(num) is False: num+=1
         return num
-    def _getDelLocCases(self, numBlock, numDel, start=0, lst=list(), root=list()):
-        '''Recursion'''
-        if numDel==1:
-            for loc in range(start, numBlock,1):
-                lst.extend(root)
-                lst.append(loc)
-        else:
-            for loc in range(start, numBlock,1):
-                root.append(loc)
-                self._getDelLocCases(numBlock, numDel-1, loc, lst, root)
-                del root[-1]
-        return lst
-
-    def getDelLocCases(self):
-        lst=self._getDelLocCases(self.numBlock, self.numDel, lst=list())
-        return np.reshape(lst,(int(len(lst)/self.numDel),self.numDel))
 
     def getBloLenCases(self):
         '''
@@ -46,19 +30,20 @@ class Simulator:
             for delIdx in delIdxs: #decrement length for each corresponding deletion, deletion is the block idx of a deletion
                 bloLenCase[delIdx]-=1
             bloLenCases.append(bloLenCase)
-        return bloLenCases
+        return bloLenCases, delLocCases
 
     def getCases(self, delMessage):
-        #numBlock, blockLength = self.getDem(mLen)
         casesInt=list()
         casesBinString=list()
-        bloLenCases = self.getBloLenCases()
-        for bloLenCase in bloLenCases:
-            caseBinString=self.breakString(delMessage, bloLenCase)
-            caseInt=self.del2gf(caseBinString)
+        bloLenCases, delLocCases = self.getBloLenCases()
+        for i in range(len(bloLenCases)):
+            caseBinString=self.breakString(delMessage, bloLenCases[i])
+            caseInt = self.binString2int(caseBinString)
+            for loc in delLocCases[i]:
+                caseInt[loc] = 0
             casesInt.append(caseInt)
             casesBinString.append(caseBinString)
-        return casesInt, casesBinString
+        return casesInt, casesBinString, delLocCases
 
     def del2gf(self, caseBinStr):
         caseInt=list()
@@ -87,25 +72,38 @@ class Simulator:
             numMissingZeros=blockLengths[-1]-len(output[-1])
             output[-1]=numMissingZeros*'0' + output[-1]
         return output
-
-    def binString2int(self, binStrings):
+    
+    @staticmethod
+    def binString2int(binStrings):
         if type(binStrings) == str:
             return int(binStrings,2)
         elif type(binStrings)==list:
-            return [int(binString,2) for binString in binStrings]
-    def int2binString(self, npbinString):
-        lastLen=self.mlen%self.blockLength
-        binString=''
-        for item in np.nditer(npbinString[0]):
-            binString+=bin(int(item))[2:].zfill(self.blockLength)
-        if lastLen != 0: binString=binString[:-self.blockLength]+binString[-lastLen:]
-        return binString
-    def pop(self, inputString,idx):
+            output=[]
+            for binString in binStrings:
+                if len(binString) == 0:
+                    output.append(self.gf)
+                else:
+                    output.append(int(binString,2))
+        return output    
+
+    def int2binString(self, num):
+        if type(num) == int:
+            return bin(int(num))[2:].zfill(self.blockLength)
+        else:
+            lastLen=self.mlen%self.blockLength
+            binString=''
+            for item in num:
+                binString+=bin(int(item))[2:].zfill(self.blockLength)
+            return binString
+
+    @staticmethod
+    def pop(inputString,idx):
         if type(idx)==int: idx=[idx]
         chars = [c for c in inputString]
         for i in sorted(idx, reverse=True):
             del chars[i]
         return ''.join(chars)
+    
     def NotAllBitEqual(ori,rec):
         print('ori: ',ori)
         print('rec: ',rec)

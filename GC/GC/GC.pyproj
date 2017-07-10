@@ -22,6 +22,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Data.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Decoder.py">
       <SubType>Code</SubType>
     </Compile>
@@ -29,6 +32,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="GC.py" />
+    <Compile Include="GCdet.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Simulator.py">
       <SubType>Code</SubType>
     </Compile>

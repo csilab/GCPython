@@ -11,7 +11,7 @@ class Decoder(Encoder):
         
         #create constrain vectors and result vectors
         numColumm=data.shape[1]
-        constrains=np.identity(numColumm)
+        constrains=np.identity(self.numBlock, dtype=int)
         data, constrains = self.delColGF(data, constrains, self.gf)
         
         #concatenate result vector with parities
@@ -23,20 +23,25 @@ class Decoder(Encoder):
         paritizedConstrains=self.trim2Square(paritizedConstrains)
         #solve matrix and validate the result with the checker parity
         X=self.solve(paritizedConstrains,paritizedData)  
-        valid=np.array_equal(np.dot(X, self.checkerDecVec)%self.gf,checkerParity)
-        
+        valid = self.isValid(X, checkerParity)
         return X, valid
-    
+    def isValid(self, ddata, cVecs, parity):
+        if np.array_equal(np.dot(ddata,cVecs)%self.gf,parity):
+            return True
+        else:
+            return False
     def solve(self, A, B):
         '''Find X in GF field where AX=B'''
-        detA=int(np.linalg.det(A))
-        invA=np.linalg.inv(A)
+        A=A.astype(np.int64)
+        detA=int(np.linalg.det(A)) #found algorithsm with O(1)
+        invA=np.linalg.inv(A).astype(int)
         #adjust the invA into an equi. GF field
         invDetAinGF=self.invgf(int(np.round(detA%self.gf)))
         adjInvA=invA*detA*invDetAinGF #adjusted inverse of matrix A
         #Calculate result matrix
         X=np.dot(B,adjInvA)
-        return X%self.gf
+        X=np.array(X).ravel()
+        return (X%self.gf).astype(int)
         
     def delColGF(self, data, constrains, indicator):
         '''Delete columms whose value is equal to self.gf'''
