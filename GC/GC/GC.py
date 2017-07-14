@@ -61,10 +61,32 @@ def test():
     return rdata
 
 def main():
-    Test(n=10000, mlen=128, numDel=1, numPro=8, f=1)
+    case
+    Simulation(n=10000, mlen=128, numDel=1, numPro=8, f=1)
     #StressTestMulti3New()
-
 def recover(orgdata, deldata, parity, mlen, de, tasks=None, results=None, poison=None, numPro=None):
+    """
+    Recover the original sequence from the deleted sequence and its parity using GC algorithms.
+
+    Args:
+        orgdata: A binary string of the original sequence, this is just to verify the simulation result.
+        deldata: A binary string of the deleted sequence.
+        parity: A list/numpy array of partity intergers.
+        mlen: The bit length of the original sequence.
+        de: A decoder.
+        tasks: A multiprocessing Queue that contains decoding tasks.
+        results: A multiprocessing Queue that contains the decoded sequences which are candidates of the original sequence.
+        poison: A multiprocessing Queue that signals stop/play the processes.
+        numPro: Number of decoding processes assisting the simulation.
+
+    Returns:
+        None if there are two distinct, valid sequences recovered -> simulation succeed.
+        An empty string if all predictions are invalid -> simulation fails.
+        A binary string of the recovered sequence if -> simultation succeeds.
+
+    Raises:
+        None
+    """
     def _recover(deldata, parity, mlen, de):
         data=Data(deldata, parity, mlen)
         rdata=''
@@ -167,7 +189,7 @@ def recover(orgdata, deldata, parity, mlen, de, tasks=None, results=None, poison
     elif rdata == orgdata:
         return 's' #success
     else:
-        return 'u' #Unknown result, need debugging
+        return 'u' #Unknown results need debugging
 
 def StressTestMulti3New(mlen=16):
     '''Test on all 16-bit binary number with
@@ -248,24 +270,79 @@ if (success+fail)%10 == 0:
         plt.show()
 
 def case(numBlock, numDel):
-    def case_rec(numBlock, numDel, start=0, lst=list(), root=list()):
-        '''Recursion'''
+    """
+     Return a LIST of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
+     Notice this call is not memory efficient because it actaully creates a list in memory. Use caseGen for a more memory friendly method.
+
+    Args:
+        numBlock: Number of blocks where deletions might occur.
+        numDel: Number of deletions.
+
+    Returns:
+        A list of all possible indices where deletions might occur. 
+
+    Raises:
+        None
+    """
+    def case_rec(numDel, start=0, lst=list(), root=list()):
+        """
+         A recursive method assiting the generation of deletion cases. This is not memory and time efficient.
+
+        Args:
+            numDel: Number of deletions.
+            start: The first deletion index of the remaining deletion.
+            lst: 1-D array of guesses for deletion indices. To be broken down into a x by numDel 2-D array.
+            root: The base indices for each each guess.
+
+        Returns:
+            A list of all possible indices where deletions might occur. 
+
+        Raises:
+            None
+        """
         if numDel==1:
             for loc in range(start, numBlock,1):
                 lst.extend(root)
                 lst.append(loc)
         else:
-            for loc in range(start, numBlock,1):
-                root.append(loc)
-                case_rec(numBlock, numDel-1, loc, lst, root)
+            for d in range(start, numBlock,1):
+                root.append(d)
+                case_rec(numDel-1, d, lst, root)
                 del root[-1]
         return lst
-    cases=case_rec(numBlock, numDel, lst=list())
+    cases=case_rec(numDel, lst=list())
     return np.reshape(cases,(int(len(cases)/numDel),numDel))
 
 def caseGen(numBlock, numDel):
-    def case_rec(numBlock, numDel, start=0, root=list()):
-        '''Recursion'''
+    """
+     Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
+     Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
+
+    Args:
+        numBlock: Number of blocks where deletions might occur.
+        numDel: Number of deletions.
+
+    Returns:
+        A generator of all possible indices where deletions might occur. 
+
+    Raises:
+        None
+    """
+    def case_rec(numDel, start=0, root=list()):
+        """
+         A recursive method assiting the generation of deletion cases.
+
+        Args:
+            numDel: Number of deletions.
+            start: The first deletion index of the remaining deletion.
+            root: The base indices for each each guess.
+
+        Returns:
+            A generator of all possible indices where deletions might occur. 
+
+        Raises:
+            None
+        """
         if numDel==1:
             for loc in range(start, numBlock,1):
                 root.append(loc)
@@ -274,12 +351,41 @@ def caseGen(numBlock, numDel):
         else:
             for loc in range(start, numBlock,1):
                 root.append(loc)
-                yield from case_rec(numBlock, numDel-1, loc, root)
+                yield from case_rec(numDel-1, loc, root)
                 del root[-1]
-    return case_rec(numBlock, numDel)
+    return case_rec(numDel)
 
-def Test(n=None, mlen=16, numDel=1, numPro=None, f=1000):
+def Simulation(n=None, mlen=16, numDel=1, numPro=None, f=1000):
+    """
+     Decodes a large amount of sequences using GC algorithms.
+
+    Args:
+        n: Number of sequence to run GC on. If n is None, run on all possible one deletion cases of all numbers of mlen length.
+        mlen: The length of each sequence.
+        numDel: Number of deletions obviously.
+        numPro: Number of decoding processes assisting the simulation.
+        f: The frequency of priting out the result to the command line.
+
+    Returns:
+        The total elapsed time of the simulation.
+
+    Raises:
+        None
+    """
     def initConsumer():
+        """
+         Initialize decoding processes.
+
+        Args:
+            numPro: Number of decoding processes assisting the simulation (received from the outer method - Test).
+
+        Returns:
+            None, None, None, None if numPro is None
+            consumers, tasks, results, poison: References to queue and processes
+
+        Raises:
+            None
+        """
         if numPro==None: return None, None ,None, None
         # Establish communication queues
         tasks = multiprocessing.JoinableQueue()
@@ -294,6 +400,24 @@ def Test(n=None, mlen=16, numDel=1, numPro=None, f=1000):
             w.start()
         return consumers, tasks, results, poison
     def getRanges():
+        """
+        Generates sequences and deletions to run the simulation on.
+
+        Args:
+            n: Number of sequence to run GC on. If n is None, run on all possible one deletion cases of all numbers of mlen length.
+            mlen: The length of each sequence.
+            numDel: Number of deletions obviously.
+            numPro: Number of decoding processes assisting the simulation.
+            f: The frequency of priting out the result to the command line.
+
+        Returns:
+            Return 2 ranges/generators:
+            orange: a collection of integers representing original sequences to decode.
+            irange: the indeces of the deletions on the original sequences.
+
+        Raises:
+            None
+        """
         if n != None:#random
             def genO():
                 for _ in range(n):
@@ -305,22 +429,22 @@ def Test(n=None, mlen=16, numDel=1, numPro=None, f=1000):
             irange=range(mlen)
         return orange, irange
     print('Testing with', 'n=', n, ' mlen=', mlen, ' numDel=', numDel, ' numPro=', numPro,' f=', f)
-    stat = {'s':0, 'f':0, 'u':0} #success, failure, unknown
-    numChecker=1
+    stat = {'s':0, 'f':0, 'u':0} #number of success, failure and unknown decoding.
+    numChecker=1 # the number of excess parities to further confirm the decoded sequence.
     en=Encoder(mlen, numDel + numChecker)
     de=GCdet(mlen, numDel + numChecker)
-    consumers, tasks, results, poison = initConsumer()#init multiprocessing if numPro is not None
-    orange, irange = getRanges()
+    consumers, tasks, results, poison = initConsumer() #init multiprocessing if numPro is not None.
+    orange, irange = getRanges() # get sequences and indices of deletions to run the simulation on.
     for num in orange:
         for dels in irange:
-            orgdata= Encoder.genMsg(num,mlen)
-            deldata=Encoder.pop(orgdata,dels)
-            parity=en.paritize(orgdata)
+            orgdata= Encoder.genMsg(num,mlen) # converts the integer num to its binary string representation.
+            deldata=Encoder.pop(orgdata,dels) # pop one or more bits out to create a deleted sequence.
+            parity=en.paritize(orgdata) # Compute the parity integers in based on the original sequence (encoder's end).
         
-            result = recover(orgdata, deldata, parity, mlen, de, tasks, results, poison)
-            stat[result]+=1
+            result = recover(orgdata, deldata, parity, mlen, de, tasks, results, poison) # decode.
+            stat[result]+=1 
 
-            if (sum(stat.values()))%f == 0:
+            if (sum(stat.values()))%f == 0: #display the results every f sequences.
                 print(stat)
 
 if __name__ == '__main__':
