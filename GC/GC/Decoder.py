@@ -1,10 +1,8 @@
 import numpy as np
 from Encoder import *
 class Decoder(Encoder):
-    def __init__(self, mlen, numEn):
-        super().__init__(mlen, numEn)
-        self.constrainDecVec= self.enVec[:,:-1]
-        self.checkerDecVec = self.enVec[:,-1:]
+    def __init__(self, mlen, numVec):
+        super().__init__(mlen, numVec)
     def decode(self, data, parity):
         #last parity -> checkerParity, the rest is constrainParity
         constrainParity, checkerParity = parity[:,:-1], parity[:,-1:]
@@ -42,7 +40,6 @@ class Decoder(Encoder):
         X=np.dot(B,adjInvA)
         X=np.array(X).ravel()
         return (X%self.gf).astype(int)
-        
     def delColGF(self, data, constrains, indicator):
         '''Delete columms whose value is equal to self.gf'''
         numColumm=data.shape[1]
@@ -53,7 +50,7 @@ class Decoder(Encoder):
         data=np.delete(data,cidxs,1) #delete columm
         constrains=np.delete(constrains,cidxs,1) #delete columm
         return data,constrains
-    
+ 
     def trim2Square(self, A):
         numRow=A.shape[0]
         numColumm=A.shape[1]
@@ -70,4 +67,5 @@ class Decoder(Encoder):
         return A
 
     def invgf(self, x):
+        '''When GF gets big, this return unaccurate results'''
         return x**(self.gf-2)%self.gf

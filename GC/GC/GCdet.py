@@ -1,9 +1,8 @@
-
 from Decoder import *
 import numpy
 class GCdet(Decoder):
-    def __init__(self, mlen, numEn):
-        super().__init__(mlen, numEn)
+    def __init__(self, mlen, numVec):
+        super().__init__(mlen, numVec)
     @staticmethod
     def _det(dels, numBlock, subMat):
         if subMat.size == 0:
@@ -28,18 +27,19 @@ class GCdet(Decoder):
             return 1
         else:
             return -1
-    def hieu(self):
+    def hieu(self, dels):
         output=[]
-        for i in range(len(self.dels)):
-            rowPicks = list(self.dels)
+        numDel=len(dels)
+        for i in range(numDel):
+            rowPicks = list(dels)
             curRow = rowPicks.pop(i)
             if curRow%2==0: #even rows, zero indexing
                 sign=1
             else: #odd rows, zero indexing
                 sign=-1
             #calculate regular item
-            lst=[]
-            for j in range(self.numBlock+len(self.dels)): # all envecs coloumn
+            lst=[0]*(self.numBlock+self.numVec)
+            for j in range(self.numBlock+numDel): # all envecs coloumn
                 if j not in rowPicks:
                     if j == curRow: pass
                     else:
@@ -55,50 +55,58 @@ class GCdet(Decoder):
                             else: #Verital slice, above
                                 subDels.append(j)
                             rowPicks.append(j)
-                            subMat = self.constrainDecVec[sorted(rowPicks),:len(rowPicks)]
+                            subMat = self.enVec[sorted(rowPicks),:len(rowPicks)]
                             del rowPicks[-1]
                         else:
-                            #colPicks takes all columns of enVecs but the current column
-                            colPicks=[x for x in range(len(self.dels)) if x!=(j%self.numBlock)]
-                            subMat = self.constrainDecVec[sorted(rowPicks),:][:,colPicks]
+                            #colPicks takes numDel columns of enVec but the current column
+                            colPicks=[x for x in range(numDel) if x!=(j%self.numBlock)]
+                            subMat = self.enVec[sorted(rowPicks),:][:,colPicks]
                         #calculate item at curRow then append to a list
-                        #print(sorted(subDels), self.numBlock-1, subMat)
                         c = sign*GCdet._det(sorted(subDels), self.numBlock-1, subMat)
                         sign*=-1
-                        lst.append(c)
-                else:pass
+                        lst[j]=c
             output.append(np.around(lst).astype(int))
         return np.transpose(output)
     def onedel(self,pdata,dels):
-        deVec=np.array(self.constrainDecVec[:,:1]).ravel()
+        numDels=len(dels)
+        deVec=np.array(self.enVec[:,:numDels]).ravel() #same as number of dels
+        checkerVec=self.enVec[:,numDels:] #use the rest of decoding vectors as the checker
+        checkerP=pdata[self.numBlock+numDels:] #corresponding parity bits
         if (dels[0]+self.numBlock)%2 == 1:
             aSign=-1
         else:
             aSign=1
-        checkerP=pdata[self.numBlock+1:]
-        checkerVec=self.enVec[:,1:]
+        #one deletion
         deVec[self.numBlock]=-1
-        det = GCdet.sign(dels,self.numBlock)*deVec[dels[0]]
-        deletion = (aSign*self.invgf(det)*np.inner(pdata,deVec))%self.gf
-        #deletion = (aSign*self.invgf(det)*np.inner(pdata,np.array(self.constrainDecVec).ravel()))%self.gf
-        pdata[dels[0]]=deletion
+        idet = self.gfinv(GCdet.sign(dels,self.numBlock)*deVec[dels[0]])
+        X = (aSign*idet*np.inner(pdata,deVec))%self.gf
+        pdata[dels[0]]=X
         valid = self.isValid(pdata, checkerVec, checkerP)
-        return [deletion], valid
+
+        return [X], valid
     def decode(self, pdata, dels):
+        dels=list(set(dels))
         if len(dels)==1: return self.onedel(pdata,dels)
-        self.dels=dels
-        det = self.det()
-        B = self.hieu()
-        X=np.dot(pdata[:self.numBlock],B)
+        numDel=len(dels)
+        checkerVec=self.enVec[:,numDel:] #use the rest of decoding vectors as the checker
+        checkerP=pdata[self.numBlock+numDel:] #corresponding parity bits
+        B = self.hieu(dels)
+        X=np.dot(pdata,B)
         for i in range(len(X)):
-            pdata=np.insert(pdata, [self.dels[i]], (X[i]*self.invgf(det))%self.gf)
-        ddata = pdata[:self.numBlock]
-        return ddata, self.isValid(ddata, pdata[-1])
+            pdata[dels[i]]==X[i]
+        valid = self.isValid(pdata, checkerVec, checkerP)
+        return X, valid
     @staticmethod
     def show(dels,numBlock):
         iden = np.identity(numBlock)
         diden= np.delete(iden,dels,1)
-        enVecs=GCdet.getEnVec(len(dels), numBlock)
+        enVecs=GCdet.getEnVec(len(dels)+1, numBlock, len(dels))
         return np.concatenate((diden,enVecs),1)
+    
+    def gfinv(self, x):
+        if x==0: return 0
+        for i in range(self.gf):
+            if (i*x)%self.gf==1:
+                return i
     def __repr__(self):
         return 'Dels: {} '.format(self.dels) + 'numBlock: {} '.format(self.numBlock) + 'enVecs: {}'.format(self.constrainDecVec)

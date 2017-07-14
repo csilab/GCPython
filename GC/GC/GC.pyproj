@@ -22,6 +22,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Consumer.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Data.py">
       <SubType>Code</SubType>
     </Compile>
@@ -31,6 +34,7 @@
     <Compile Include="Encoder.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="GC - Backup.py" />
     <Compile Include="GC.py" />
     <Compile Include="GCdet.py">
       <SubType>Code</SubType>

@@ -31,7 +31,6 @@ class Simulator:
                 bloLenCase[delIdx]-=1
             bloLenCases.append(bloLenCase)
         return bloLenCases, delLocCases
-
     def getCases(self, delMessage):
         casesInt=list()
         casesBinString=list()
@@ -45,46 +44,10 @@ class Simulator:
             casesBinString.append(caseBinString)
         return casesInt, casesBinString, delLocCases
 
-    def del2gf(self, caseBinStr):
-        caseInt=list()
-        for i in range(len(caseBinStr)):
-            if len(caseBinStr[i]) == self.blockLength: val=self.binString2int(caseBinStr[i])
-            else:val=self.gf
-            caseInt.append(val)
-        return caseInt
-
     def getDem(self, k): #k == original message length
         blockLength=int(math.ceil(math.log(k,2)))#round up
         numBlock=int(math.ceil(k/blockLength))#round up
         return numBlock, blockLength
-
-    def breakString(self, inputString, blockLengths=None):
-        if blockLengths==None:
-            output=[inputString[i:i+self.blockLength] for i in range(0, len(inputString), self.blockLength)]
-            numMissingZeros=self.blockLength-len(output[-1])
-            output[-1]=numMissingZeros*'0' + output[-1]
-        elif type(blockLengths)==list:
-            output=list()
-            idx=0
-            for blockLength in blockLengths:
-                output.append(inputString[idx:idx+blockLength])
-                idx+=blockLength
-            numMissingZeros=blockLengths[-1]-len(output[-1])
-            output[-1]=numMissingZeros*'0' + output[-1]
-        return output
-    
-    @staticmethod
-    def binString2int(binStrings):
-        if type(binStrings) == str:
-            return int(binStrings,2)
-        elif type(binStrings)==list:
-            output=[]
-            for binString in binStrings:
-                if len(binString) == 0:
-                    output.append(self.gf)
-                else:
-                    output.append(int(binString,2))
-        return output    
 
     def int2binString(self, num):
         if type(num) == int:
@@ -96,14 +59,14 @@ class Simulator:
                 binString+=bin(int(item))[2:].zfill(self.blockLength)
             return binString
 
-    @staticmethod
-    def pop(inputString,idx):
-        if type(idx)==int: idx=[idx]
-        chars = [c for c in inputString]
-        for i in sorted(idx, reverse=True):
-            del chars[i]
-        return ''.join(chars)
-    
+#not used
+    def del2gf(self, caseBinStr):
+        caseInt=list()
+        for i in range(len(caseBinStr)):
+            if len(caseBinStr[i]) == self.blockLength: val=self.binString2int(caseBinStr[i])
+            else:val=self.gf
+            caseInt.append(val)
+        return caseInt
     def NotAllBitEqual(ori,rec):
         print('ori: ',ori)
         print('rec: ',rec)

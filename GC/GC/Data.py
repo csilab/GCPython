@@ -19,7 +19,7 @@ class Data:
         lastLen=self.mlen%self.blockLength
         b[-1]=b[-1][-lastLen:]
         return ''.join(b)
-    
+
     @staticmethod
     def levCheck(r, b, dels):
         def lev(strX, strY):
@@ -101,3 +101,12 @@ class Data:
         numZeros=lens[-1]-len(output[-1])
         output[-1]=output[-1].zfill(numZeros)
         return output
+    @staticmethod
+    def gfCheck(data, blockLength, gf):
+        '''Check if each element of data is within the range val < 2^ blockLength'''
+        for val in data:
+            if val >= 2**blockLength and val < gf:
+                print(data)
+                return False
+        else:
+           return True
