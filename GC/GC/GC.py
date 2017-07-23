@@ -1,4 +1,4 @@
-from multiprocessing import Process, queues
+from multiprocessing import Process, Queue, Pool, Pipe
 import multiprocessing
 from Encoder import *
 from Decoder import *
@@ -9,62 +9,105 @@ import time
 from Data import *
 from Consumer import *
 import random
+from ctypes import c_int, c_char_p
 
 def test():
-    # Establish communication queues
-    tasks = multiprocessing.JoinableQueue()
-    poison = multiprocessing.JoinableQueue()
-    results = multiprocessing.Queue()
-
-    # Start consumers
-    #num_consumers = multiprocessing.cpu_count() * 2
-    num_consumers =8
-    print ('Creating {} consumers'.format(num_consumers))
-    consumers = [ Consumer(tasks, results, poison)
-                  for i in range(num_consumers) ]
-
-    print('has consumers')
+    sPermission = LockedInt(8)
+    sAvai = LockedInt(0)
+    sDelData = LockedString('hieu')
+    sParity = LockedList([1,2])
+    sResult = LockedString('')
+    numPro = 2
+    consumers = [ Consumer2(sDelData, sParity, sResult, sPermission, sAvai, data)
+                    for i in range(numPro) ]
     for w in consumers:
         w.start()
-    print('started consumers')    #bit16test()
-    
-    numDel=1
-    data=Data(s='000010011010011', p=[3,16], mlen=16)
-    de=GCdet(16, numDel + 1)
-    dels=caseGen(4, 1)
-    count=0
+    sDelData.set('1111000011110000')
+    sParity.set([5,6,7])
+def test2():
+    numBlock = 8 ; numDel=4
+    t = getTable(numBlock, numDel)
+    dels = caseGen1(numBlock, numDel, frm = [200],to = 80, table = t)
+    c=0
     for d in dels:
-        tasks.put(Task(data,list(d),de))
-        count+=1
-
-    # Add a poison pill for each consumer
-    rdata=''
-    while True:
-        if not results.empty():
-            candidate=results.get()
-            if candidate != None:
-                if len(rdata)==0:
-                    rdata = candidate
-                elif candidate!=rdata:
-                    rdata = None
-                    break
-                elif candidate==rdata: pass
-                else: print('what?')
-            else: pass #candidate is not None -> next case
-        elif tasks.empty():
-            break
-    poison.put(None)
-
-    # Wait for all of the tasks to finish
-    tasks.join()
-
-    return rdata
-
+        print(c,d)
+        c+=1
 def main():
-    case
-    Simulation(n=10000, mlen=128, numDel=1, numPro=8, f=1)
+
+    #bits=[128,192,256,384,512,768,1024,1536,2048]
+    bits=[128,192,256,384,512,768,1024]
+    #bits=[128]
+    #bits=[4096, 8192, 16384, 32768, 131072]
+    for mlen in bits:
+        Simulation(n=10000, mlen=mlen, numDel=2, numPro=4, f=1000)
+        print('Ended', mlen)
+        print()
     #StressTestMulti3New()
-def recover(orgdata, deldata, parity, mlen, de, tasks=None, results=None, poison=None, numPro=None):
+#def recover(orgdata, deldata, parity, mlen, de, tasks=None, results=None, poison=None, control=None, result=None, numPro=None, p = None):
+def caseGen1(numBlock, numDel, frm, to=None, table = None):
+        """
+         Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
+         Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
+
+        Args:
+            numBlock: Number of blocks where deletions might occur.
+            numDel: Number of deletions.
+
+        Returns:
+            A generator of all possible indices where deletions might occur. 
+
+        Raises:
+            None
+        """
+        #numBlock, numDel = self.numBlock, self.mlen-len(self.s)
+        frm[0]+=1
+        def case_rec(numDel, start=0, root=list()):
+            """
+             A recursive method assiting the generation of deletion cases.
+
+            Args:
+                numDel: Number of deletions.
+                start: The first deletion index of the remaining deletion.
+                root: The base indices for each each guess.
+
+            Returns:
+                A generator of all possible indices where deletions might occur. 
+
+            Raises:
+                None
+            """
+            if numDel==1:
+                for loc in range(numBlock - frm[0], start -1 , -1):
+                    if count[0] >= to: break
+                    else:
+                        root.append(loc)
+                        yield root
+                        del root[-1]
+                    count[0]+=1
+            else:
+                idx = 0
+                for i in range(len(table[numDel])):
+                    if table[numDel][i]>=frm[0]:
+                        idx = i
+                        break
+                frm[0] = frm[0] - table[numDel][idx - 1]
+                for d in range(numBlock - idx, start -1 , -1):
+                    if count[0] >= to: break
+                    root.append(d)
+                    yield from case_rec(numDel-1, d, root)
+                    del root[-1]
+        if to == None: to = table[numDel][numBlock]
+        count=[0]
+        return case_rec(numDel)
+def getTable(numDel, numBlock):
+    t = []
+    d1 = [1]*numBlock
+    d1[0]=0
+    t.append(d1)
+    for n in range(numDel+1):
+        t.append([sum(t[-1][:i]) for i in range(1, numBlock +1)])
+    return t
+def recover(data, deldata):
     """
     Recover the original sequence from the deleted sequence and its parity using GC algorithms.
 
@@ -87,12 +130,11 @@ def recover(orgdata, deldata, parity, mlen, de, tasks=None, results=None, poison
     Raises:
         None
     """
-    def _recover(deldata, parity, mlen, de):
-        data=Data(deldata, parity, mlen)
+    def _recover():
         rdata=''
-        dels=caseGen(de.numBlock, mlen-len(deldata))
+        dels=caseGen(data.numBlock, data.numDel)
         for d in dels:
-            candidate = data.decode(d,de)
+            candidate = data.decode(d)
             if candidate != None:
                 if len(rdata)==0:
                     rdata = candidate
@@ -142,54 +184,29 @@ def recover(orgdata, deldata, parity, mlen, de, tasks=None, results=None, poison
         poison.put(None)
         tasks.join() # Wait for all of the tasks to finish
         return rdata
-    def _recover_mul_rec(deldata, parity, mlen, de, tasks, results, poison):
-        poison.get() #play
+    def _recover_mul_rec(deldata, parity, mlen, de, tasks, results, poison, control, result):
+        with control.lock:
+            control.val.value=1
+        with result.lock:
+            result.val.value=''
         data=Data(deldata, parity, mlen)
         dels=caseGen(de.numBlock, mlen-len(deldata))
+        rdata=''
         numTask=0
+        got=0
         for d in dels:
+            print(d)
+            if len(d)==0: raise F
             tasks.put(Task(data,list(d),de))
             numTask+=1
-        rdata=''
-        while numTask:
-            if not results.empty():
-                candidate=results.get()
-                if candidate != None:
-                    if len(rdata)==0:
-                        rdata = candidate
-                    elif candidate!=rdata:
-                        #print('Declare failure')
-                        rdata = None
-                        break
-                    elif candidate==rdata: pass
-                    else: print('what?')
-                else: pass #candidate is not None -> next case
-                numTask-=1
-            else:pass
-                #print('result is empty')
-        #pause processes and clean up Q's
-        poison.put('Pause')
-        #print('paused')
-        tasks.join() # Wait for all of the tasks to finish
-        while not results.empty():
-            results.get()
-        #print('clear results')
+        
+        while not tasks.empty(): pass
+        #results.join()
+        #tasks.join() # Wait for all of the tasks to finish
+        with control.lock:
+            control.val.value=0
+    return _recover()
 
-        return rdata    
-    if tasks==None:
-        if numPro==None:
-            rdata = _recover(deldata, parity, mlen, de)
-        else:
-            rdata = _recover_mul(deldata, parity, mlen, de, numPro)
-    else:
-        rdata = _recover_mul_rec(deldata, parity, mlen, de, tasks, results, poison)
-    #final verification.
-    if rdata == None:
-        return 'f' #Fail sequence, successful simulation
-    elif rdata == orgdata:
-        return 's' #success
-    else:
-        return 'u' #Unknown results need debugging
 
 def StressTestMulti3New(mlen=16):
     '''Test on all 16-bit binary number with
@@ -355,7 +372,7 @@ def caseGen(numBlock, numDel):
                 del root[-1]
     return case_rec(numDel)
 
-def Simulation(n=None, mlen=16, numDel=1, numPro=None, f=1000):
+def Simulation(n=1, mlen=16, numDel=1, numPro=None, f=1000):
     """
      Decodes a large amount of sequences using GC algorithms.
 
@@ -372,33 +389,20 @@ def Simulation(n=None, mlen=16, numDel=1, numPro=None, f=1000):
     Raises:
         None
     """
-    def initConsumer():
-        """
-         Initialize decoding processes.
-
-        Args:
-            numPro: Number of decoding processes assisting the simulation (received from the outer method - Test).
-
-        Returns:
-            None, None, None, None if numPro is None
-            consumers, tasks, results, poison: References to queue and processes
-
-        Raises:
-            None
-        """
-        if numPro==None: return None, None ,None, None
-        # Establish communication queues
-        tasks = multiprocessing.JoinableQueue()
-        poison = multiprocessing.JoinableQueue()
-        results = multiprocessing.Queue()
-        poison.put('Pause')
-        # Start consumers
-        #numPro = multiprocessing.cpu_count() * 2
-        consumers = [ Consumer(tasks, results, poison)
-                        for i in range(numPro) ]
-        for w in consumers:
-            w.start()
-        return consumers, tasks, results, poison
+    def _recover(data):
+        rdata=''
+        dels=caseGen(data.numBlock, data.numDel)
+        for d in dels:
+            candidate = data.decode(d)
+            if candidate != None:
+                if len(rdata)==0:
+                    rdata = candidate
+                elif candidate!=rdata:
+                    return None
+                elif candidate==rdata: pass
+                else: print('what?')
+            else: pass#candidate is not None -> next case
+        return rdata
     def getRanges():
         """
         Generates sequences and deletions to run the simulation on.
@@ -422,30 +426,166 @@ def Simulation(n=None, mlen=16, numDel=1, numPro=None, f=1000):
             def genO():
                 for _ in range(n):
                     yield random.randrange(2**mlen)
+            def genI():
+                for _ in range(n):
+                    yield random.sample(range(mlen), numDel)
             orange=genO()
-            irange = [random.sample(range(mlen), numDel)]
+            irange = genI()
         else:
             orange=range(2**mlen)
             irange=range(mlen)
         return orange, irange
+    def initConsumer(numPro):
+        """
+         Initialize decoding processes.
+
+        Args:
+            numPro: Number of decoding processes assisting the simulation (received from the outer method - Test).
+
+        Returns:
+            None, None, None, None if numPro is None
+            consumers, tasks, results, poison: References to queue and processes
+
+        Raises:
+            None
+        """
+        if numPro==None: return None, None ,None, None, None, None
+        # Establish communication queues
+        sPermission = LockedInt(0)
+        sAvai = LockedInt(numPro)
+        sDelData = LockedString('hieu')
+        sParity = LockedList([1,2])
+        sResult = LockedString(None)
+        de=GCdet(mlen, numDel + numChecker)
+        print(de)
+        data=Data(mlen, de, numDel)
+        consumers = [ Consumer2(sDelData, sParity, sResult, sPermission, sAvai, data, i, numPro)
+                        for i in range(numPro) ]
+        for w in consumers:
+            w.start()
+        return consumers, sDelData, sParity, sResult, sPermission, sAvai, data
+    def initPool():
+        """
+         Initialize decoding processes.
+
+        Args:
+            numPro: Number of decoding processes assisting the simulation (received from the outer method - Test).
+
+        Returns:
+            None, None, None, None if numPro is None
+            consumers, tasks, results, poison: References to queue and processes
+
+        Raises:
+            None
+        """
+        if numPro==None: return None
+        # Establish communication queues
+        p = Pool(numPro)
+        return p
+    def useConsummer2():
+        #start timer here
+        sDelData.set(deldata)
+        sParity.set(parity)
+        sPermission.set(numPro)
+        while sPermission == numPro:pass
+            #print('wating 1')
+        while sAvai != numPro:pass
+            #print('waiting 2')
+        print('main', sResult)
+    def endConsummer2():
+        #time.sleep(2)
+        sPermission.set(-numPro)
+    def initConsumer3(numPro):
+        """
+         Initialize decoding processes.
+
+        Args:
+            numPro: Number of decoding processes assisting the simulation (received from the outer method - Test).
+
+        Returns:
+            None, None, None, None if numPro is None
+            consumers, tasks, results, poison: References to queue and processes
+
+        Raises:
+            None
+        """
+        if numPro==None: return None, None
+        # Establish communication queues
+        de=GCdet(mlen, numDel + numChecker)
+        #print(de)
+        data=Data(mlen, de, numDel)
+        fq=[Queue() for _ in range(numPro)] #Feeder Queue
+        mq=[Queue() for _ in range(numPro)] #Merger Queue
+        rq=Queue() #Result Queue
+        decoders = [ Consumer3(id, fq[id], mq[id], data, numPro) for id in range(numPro) ]        
+        merger=Merger(mq, rq)
+        
+        for w in decoders:
+            w.start()
+        merger.start()
+        return fq, rq
+    def useConsummer3():
+        fq, rq = initConsumer3(numPro) #init multiprocessing if numPro is not None.
+        count=0
+        o=[]
+        for num in orange:
+            for dels in irange:
+                orgdata= Encoder.genMsg(num,mlen) # converts the integer num to its binary string representation.
+                deldata=Encoder.pop(orgdata,dels) # pop one or more bits out to create a deleted sequence.
+                parity=en.paritize(orgdata) # Compute the parity integers in based on the original sequence (encoder's end).
+                for i in range(numPro):
+                    fq[i].put(Job(count, deldata, parity))
+                o.append(orgdata)
+                count+=1
+        #add poison
+        for i in range(numPro):
+            fq[i].put(None)
+        while count:
+            if not rq.empty():
+                #print('getting result')
+                result = rq.get()
+                record(o[result.id], result.s, result.valid)
+                count-=1
+    def sequential():
+        de=GCdet(mlen, numDel + numChecker)
+        print(de)
+        for num in orange:
+            for dels in irange:
+                print(dels)
+                #dels[0]=41
+                #dels[1]=50
+                orgdata= Encoder.genMsg(num,mlen) # converts the integer num to its binary string representation.
+                #orgdata='1011000011101101001011111001110010001001111111100111001001100001'
+                #print(orgdata)
+                deldata=Encoder.pop(orgdata,dels) # pop one or more bits out to create a deleted sequence.
+                #print(deldata)
+                parity=en.paritize(orgdata) # Compute the parity integers in based on the original sequence (encoder's end).
+                data=Data(mlen, de, numDel, deldata, parity)
+                r = _recover(data)
+                record(orgdata, r, True)
+    def record(org, rec, valid):
+        if valid:
+            if rec==None:
+                r='f'
+            elif org==rec:
+                r='s'
+            else:
+                r='u'
+                print('org',org)
+                print('rec',rec)
+            stat[r]+=1
+        else:
+            r='f'
+        if (sum(stat.values()))%f == 0: #display the results every f sequences.
+            print(stat)
     print('Testing with', 'n=', n, ' mlen=', mlen, ' numDel=', numDel, ' numPro=', numPro,' f=', f)
     stat = {'s':0, 'f':0, 'u':0} #number of success, failure and unknown decoding.
     numChecker=1 # the number of excess parities to further confirm the decoded sequence.
     en=Encoder(mlen, numDel + numChecker)
-    de=GCdet(mlen, numDel + numChecker)
-    consumers, tasks, results, poison = initConsumer() #init multiprocessing if numPro is not None.
     orange, irange = getRanges() # get sequences and indices of deletions to run the simulation on.
-    for num in orange:
-        for dels in irange:
-            orgdata= Encoder.genMsg(num,mlen) # converts the integer num to its binary string representation.
-            deldata=Encoder.pop(orgdata,dels) # pop one or more bits out to create a deleted sequence.
-            parity=en.paritize(orgdata) # Compute the parity integers in based on the original sequence (encoder's end).
-        
-            result = recover(orgdata, deldata, parity, mlen, de, tasks, results, poison) # decode.
-            stat[result]+=1 
-
-            if (sum(stat.values()))%f == 0: #display the results every f sequences.
-                print(stat)
-
+    if numPro == None:
+        sequential()
+    else:
+        useConsummer3()
 if __name__ == '__main__':
     main()

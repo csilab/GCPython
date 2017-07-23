@@ -4,4 +4,9 @@
     <TargetProject>3eb283bb-0d64-42de-af0c-c0e1429e49b8</TargetProject>
     <FriendlyName>GC</FriendlyName>
   </ProjectTarget>
+  <Reports>
+    <Report>
+      <Filename>C:\Users\hn\AppData\Local\Temp\GC1_20170718.vsp</Filename>
+    </Report>
+  </Reports>
 </ProfilingTarget>

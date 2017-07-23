@@ -24,7 +24,8 @@ class Decoder(Encoder):
         valid = self.isValid(X, checkerParity)
         return X, valid
     def isValid(self, ddata, cVecs, parity):
-        if np.array_equal(np.dot(ddata,cVecs)%self.gf,parity):
+        dproduct = np.dot(ddata,cVecs)%self.gf
+        if np.array_equal(dproduct,parity):
             return True
         else:
             return False
@@ -50,7 +51,6 @@ class Decoder(Encoder):
         data=np.delete(data,cidxs,1) #delete columm
         constrains=np.delete(constrains,cidxs,1) #delete columm
         return data,constrains
- 
     def trim2Square(self, A):
         numRow=A.shape[0]
         numColumm=A.shape[1]
@@ -65,7 +65,6 @@ class Decoder(Encoder):
         numColumm=A.shape[1]
         A=np.delete(A, range(numColumm-count,numColumm,1), 1)
         return A
-
     def invgf(self, x):
         '''When GF gets big, this return unaccurate results'''
         return x**(self.gf-2)%self.gf

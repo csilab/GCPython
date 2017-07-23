@@ -10,8 +10,8 @@ class GCdet(Decoder):
         else:
             #print(subMat,dels)
             return GCdet.sign(dels, numBlock) * np.linalg.det(subMat.astype(np.int64))
-    def det(self):
-        return GCdet._det(self.dels, self.numBlock, self.constrainDecVec[self.dels,:len(self.dels)])
+    def det(self, dels):
+        return GCdet._det(dels, self.numBlock, self.enVec[dels,:len(dels)])
     @staticmethod
     def sign(dels,numBlock):
         numMi = 0
@@ -79,22 +79,35 @@ class GCdet(Decoder):
         #one deletion
         deVec[self.numBlock]=-1
         idet = self.gfinv(GCdet.sign(dels,self.numBlock)*deVec[dels[0]])
-        X = (aSign*idet*np.inner(pdata,deVec))%self.gf
+        product = np.inner(pdata,deVec)
+        X = (aSign*idet*product)%self.gf
         pdata[dels[0]]=X
         valid = self.isValid(pdata, checkerVec, checkerP)
 
         return [X], valid
+    def onedel2(self,pdata,dels):
+        '''Use '111' encoding vector, do only additions and subtractions'''
+        numDels=1
+        checkerVec=self.enVec[:,numDels:] #use the rest of decoding vectors as the checker
+        checkerP=pdata[self.numBlock+numDels:] #corresponding parity bits
+        pdata[dels[0]]=0
+        X = (pdata[self.numBlock]+pdata[self.numBlock]+sum(checkerP)-sum(pdata))%self.gf
+        pdata[dels[0]]=X
+        valid = self.isValid(pdata, checkerVec, checkerP)
+        return [X], valid
     def decode(self, pdata, dels):
-        dels=list(set(dels))
-        if len(dels)==1: return self.onedel(pdata,dels)
+        #temppdata=np.array(pdata)
+        dels=list(sorted(set(dels)))
         numDel=len(dels)
+        if numDel==1: return self.onedel(pdata,dels)
         checkerVec=self.enVec[:,numDel:] #use the rest of decoding vectors as the checker
         checkerP=pdata[self.numBlock+numDel:] #corresponding parity bits
-        B = self.hieu(dels)
-        X=np.dot(pdata,B)
+        B = self.hieu(dels)%self.gf
+        X=np.dot(pdata,B)*self.gfinv(self.det(dels))%self.gf
         for i in range(len(X)):
-            pdata[dels[i]]==X[i]
+            pdata[dels[i]]=X[i]
         valid = self.isValid(pdata, checkerVec, checkerP)
+        #print('case',temppdata,valid)
         return X, valid
     @staticmethod
     def show(dels,numBlock):
@@ -104,9 +117,12 @@ class GCdet(Decoder):
         return np.concatenate((diden,enVecs),1)
     
     def gfinv(self, x):
+        x=int(round(x))%self.gf
         if x==0: return 0
         for i in range(self.gf):
             if (i*x)%self.gf==1:
                 return i
+        else:
+            raise CantFindGFinv
     def __repr__(self):
         return 'Dels: {} '.format(self.dels) + 'numBlock: {} '.format(self.numBlock) + 'enVecs: {}'.format(self.constrainDecVec)

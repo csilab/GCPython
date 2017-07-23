@@ -24,14 +24,13 @@ class Encoder:
         numBlock=int(math.ceil(k/blockLength))#round up
         return numBlock, blockLength
 
-    @staticmethod
-    def oldgetEnVec(numBlock, numVec):
+    def oldgetEnVec(self, numVec):
         '''the last rows are zeros'''
-        length=numBlock + numVec
+        length=self.numBlock + numVec
         vectors=list()
         vectors = np.reshape([i**x for i in range(1,numVec+1) for x in range(length)],(numVec,length))
-        vectors[:,numBlock:]=0
-        return np.transpose(vectors)
+        vectors[:,self.numBlock:]=0
+        return np.transpose(vectors)%self.gf
 
     def getEnVec(self, numVec):
         def gfArrayInv(A):
@@ -47,7 +46,7 @@ class Encoder:
         A=(x.reshape((-1,1)) - y)%self.gf
         gfArrayInv(A)
         A[self.numBlock:,:]=[0]
-        return A
+        return A%self.gf
 
     @staticmethod
     def genMsg(dataInt, mLen):
@@ -60,6 +59,7 @@ class Encoder:
         if type(data) == str:
             data = np.array(self.binString2int(self.breakString(data)))
         p= np.dot(data, self.enVec[:len(data),:])%self.gf
+        #print('org', data)
         return p
 
     def breakString(self, inputString, blockLengths=None):
