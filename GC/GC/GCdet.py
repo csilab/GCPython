@@ -67,48 +67,89 @@ class GCdet(Decoder):
                         lst[j]=c
             output.append(np.around(lst).astype(int))
         return np.transpose(output)
-    def onedel(self,pdata,dels):
-        numDels=len(dels)
-        deVec=np.array(self.enVec[:,:numDels]).ravel() #same as number of dels
-        checkerVec=self.enVec[:,numDels:] #use the rest of decoding vectors as the checker
-        checkerP=pdata[self.numBlock+numDels:] #corresponding parity bits
-        if (dels[0]+self.numBlock)%2 == 1:
-            aSign=-1
-        else:
-            aSign=1
-        #one deletion
-        deVec[self.numBlock]=-1
-        idet = self.gfinv(GCdet.sign(dels,self.numBlock)*deVec[dels[0]])
-        product = np.inner(pdata,deVec)
-        X = (aSign*idet*product)%self.gf
-        pdata[dels[0]]=X
-        valid = self.isValid(pdata, checkerVec, checkerP)
+    def onedel(self,data, parity, dels):
+        '''cX + sumknown = p0
+            X = (p0-sumknown)*cInverse
+        Where:
+            X = deletion integer
+            sumknown = np.inner(data,dvec)
+            p0 = parity[0]
+            cInverse = self.gfinv(dvec[dels[0]])
+        '''
+        #print(data)
+        def isvalid(i):
+            return ((self.enVec[dels[0]][i] * X) - pprime[i])%self.gf == 0
+        pprime = parity - np.dot(data,self.enVec)
+        #print(pprime, dels)
+        X = (self.gfinv[self.enVec[dels[0]][0]] * (pprime[0])) % self.gf
+        #print(dels, X)
+        for i in range(1, len(pprime)):
+            valid = isvalid(i)
+            if not valid: break
+        #X = (self.gfinv[self.dvec[dels[0]]]*(parity[0]-np.inner(data,self.dvec)))%self.gf
+        #data[dels[0]]=X
+        #valid = self.isValid(data, self.cvec, parity[1:])
+        return [X], valid
+    def _onedel(self,pprime, dels):
+        def isvalid(i):
+            return ((self.enVec[dels][i] * X) - pprime[i])%self.gf == 0
+        X = (self.gfinv[self.enVec[dels][0]] * (pprime[0])) % self.gf
+        valid = True
+        for i in range(1, len(pprime)):
+            valid = isvalid(i)
+            if not valid: break
+        return X, valid
 
-        return [X], valid
-    def onedel2(self,pdata,dels):
-        '''Use '111' encoding vector, do only additions and subtractions'''
-        numDels=1
-        checkerVec=self.enVec[:,numDels:] #use the rest of decoding vectors as the checker
-        checkerP=pdata[self.numBlock+numDels:] #corresponding parity bits
-        pdata[dels[0]]=0
-        X = (pdata[self.numBlock]+pdata[self.numBlock]+sum(checkerP)-sum(pdata))%self.gf
-        pdata[dels[0]]=X
-        valid = self.isValid(pdata, checkerVec, checkerP)
-        return [X], valid
-    def decode(self, pdata, dels):
-        #temppdata=np.array(pdata)
+    def _twodels(self, pprime, dels):
+        def isvalid(i):
+            return ((self.enVec[dels[0]][i] * X1 + self.enVec[dels[1]][i]*X2) - pprime[i])%self.gf == 0
+        # detA = ad - bc
+        detA = ((self.enVec[dels[0]][0]*self.enVec[dels[1]][1])-(self.enVec[dels[1]][0]*self.enVec[dels[0]][1]))
+        idetA = self.gfinv[detA%self.gf]
+        detX1 = (pprime[0]*self.enVec[dels[1]][1])-(pprime[1]*self.enVec[dels[1]][0])
+        detX2 = (pprime[1]*self.enVec[dels[0]][0])-(pprime[0]*self.enVec[dels[0]][1])
+        X1 = detX1*idetA%self.gf
+        X2 = detX2*idetA%self.gf
+        for i in range(2, len(pprime)):
+            valid = isvalid(i)
+            if not valid: break
+        return [X1, X2], valid
+
+    def decode(self, data, parity, dels):
+        print(sum(data),',',data,',' ,',',dels)
         dels=list(sorted(set(dels)))
         numDel=len(dels)
-        if numDel==1: return self.onedel(pdata,dels)
+        #print(sum(data), data, dels)
+        if numDel==1: return self.onedel(data, parity, dels)
+        if numDel==2: return self.twodels(data, parity,dels)
+        if numDel==3: return self.twodels(data, parity,dels)
         checkerVec=self.enVec[:,numDel:] #use the rest of decoding vectors as the checker
         checkerP=pdata[self.numBlock+numDel:] #corresponding parity bits
         B = self.hieu(dels)%self.gf
-        X=np.dot(pdata,B)*self.gfinv(self.det(dels))%self.gf
+        X=np.dot(pdata,B)*self.gfinv[self.det(dels)%self.gf]%self.gf
         for i in range(len(X)):
             pdata[dels[i]]=X[i]
         valid = self.isValid(pdata, checkerVec, checkerP)
         #print('case',temppdata,valid)
         return X, valid
+    def twodels(self, data, parity, dels):
+        def isvalid(i):
+            return ((self.enVec[dels[0]][i] * X1 + self.enVec[dels[1]][i]*X2) - pprime[i])%self.gf == 0
+        pprime = parity - np.dot(data,self.enVec)
+        #print(pprime, dels)
+        # detA = ad - bc
+        detA = ((self.enVec[dels[0]][0]*self.enVec[dels[1]][1])-(self.enVec[dels[1]][0]*self.enVec[dels[0]][1]))
+        idetA = self.gfinv[detA%self.gf]
+        detX1 = (pprime[0]*self.enVec[dels[1]][1])-(pprime[1]*self.enVec[dels[1]][0])
+        detX2 = (pprime[1]*self.enVec[dels[0]][0])-(pprime[0]*self.enVec[dels[0]][1])
+        X1 = detX1*idetA%self.gf
+        X2 = detX2*idetA%self.gf
+        for i in range(2, len(pprime)):
+            valid = isvalid(i)
+            if not valid: break
+        return [X1, X2], valid
+    def threedels(self, data, parity, dels):
+        return 2, True
     @staticmethod
     def show(dels,numBlock):
         iden = np.identity(numBlock)

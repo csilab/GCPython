@@ -27,7 +27,6 @@ class Consumer(multiprocessing.Process):
                                 with self.control.lock:
                                     self.control.val.value = 0
                                 self.result.val.value = None
-
                             elif candidate==self.result.val.value: pass
                             else: print('what?')
                     else: pass #candidate is not None -> next case                   

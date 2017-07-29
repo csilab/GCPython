@@ -4,10 +4,23 @@ class Encoder:
     def __init__(self, mlen, numVec):
         self.numBlock, self.blockLength = self.getDem(mlen)
         self.gf=self.nextPrime(2**self.blockLength)
+        self.gfinv = self.getgfdict()
         self.numVec=numVec
         #self.enVec=self.oldgetEnVec(self.numBlock,numVec)
         self.enVec=self.getEnVec(numVec)
+        self.dvec=np.array(self.enVec[:,:1]).ravel() #only the first columm for fast one deletion decoding
+        self.cvec=self.enVec[:,1:] #only the rest of enVec for fast one deletion checking
         
+    def getgfdict(self):
+        d={}
+        for i in range(1, self.gf):
+            for j in range(1, self.gf):
+                if i*j%self.gf==1:
+                    d[i]=j
+                    d[j]=i
+        d[0]=None
+        return d
+
     def isPrime(self, num):
          if num < 2: return False
          for i in range(2, int(math.sqrt(num)) + 1):
@@ -26,26 +39,20 @@ class Encoder:
 
     def oldgetEnVec(self, numVec):
         '''the last rows are zeros'''
-        length=self.numBlock + numVec
+        length=self.numBlock
         vectors=list()
         vectors = np.reshape([i**x for i in range(1,numVec+1) for x in range(length)],(numVec,length))
-        vectors[:,self.numBlock:]=0
         return np.transpose(vectors)%self.gf
 
     def getEnVec(self, numVec):
-        def gfArrayInv(A):
-            def gfinv(x):
-                if x==0: return 0
-                for i in range(self.gf):
-                    if (i*x)%self.gf==1:
-                        return i
+        def inv(A):
             for x in np.nditer(A, op_flags=['readwrite']):
-                x[...] = gfinv(x)
-        x = np.array(range(self.numBlock+numVec),np.int64)
+                x[...] = self.gfinv[int(x)]
+        x = np.array(range(self.numBlock),np.int64)
         y = np.array(range(self.numBlock,self.numBlock+numVec),np.int64)
         A=(x.reshape((-1,1)) - y)%self.gf
-        gfArrayInv(A)
-        A[self.numBlock:,:]=[0]
+        inv(A)
+        #A[self.numBlock:,:]=[0]
         return A%self.gf
 
     @staticmethod
@@ -56,6 +63,7 @@ class Encoder:
         return orim
 
     def paritize(self, data):
+
         if type(data) == str:
             data = np.array(self.binString2int(self.breakString(data)))
         p= np.dot(data, self.enVec[:len(data),:])%self.gf
@@ -90,12 +98,6 @@ class Encoder:
                     output.append(int(eachb,2))
         return output 
 
-    def __str__(self):
-        return ('Decoding matrix: \n'+str(self.enVec)+
-                '\nnumBlock: ' + str(self.numBlock) + 
-                '\nblockLength: ' + str(self.blockLength) + 
-                '\ngf({})'.format(self.gf))
-
     @staticmethod
     def pop(inputString,idx):
         if type(idx)==int: idx=[idx]
@@ -103,3 +105,9 @@ class Encoder:
         for i in sorted(idx, reverse=True):
             del chars[i]
         return ''.join(chars)
+
+    def __str__(self):
+        return ('Decoding matrix: \n'+str(self.enVec)+
+                '\nnumBlock: ' + str(self.numBlock) + 
+                '\nblockLength: ' + str(self.blockLength) + 
+                '\ngf({})'.format(self.gf))

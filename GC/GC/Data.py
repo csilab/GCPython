@@ -18,7 +18,6 @@ class Data:
         self.numDel = numDel
         self.table = self.getTable()
         
-
     def case(self):
         """
          Return a LIST of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
@@ -63,7 +62,8 @@ class Data:
             return lst
         cases=case_rec(numDel, lst=list())
         return np.reshape(cases,(int(len(cases)/numDel),numDel))
-    def caseGen(self):
+    
+    def caseGen(self, reverse = False):
         """
          Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
          Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
@@ -79,7 +79,7 @@ class Data:
             None
         """
         numBlock, numDel = self.numBlock, self.mlen-len(self.s)
-        def case_rec(numDel, start=0, root=list()):
+        def case_rec(numDel, first, last, root=list()):
             """
              A recursive method assiting the generation of deletion cases.
 
@@ -95,16 +95,79 @@ class Data:
                 None
             """
             if numDel==1:
-                for loc in range(start, numBlock,1):
-                    root.append(loc)
+                for current in range(first, last, change):
+                    root.append(current)
                     yield root
                     del root[-1]
             else:
-                for loc in range(start, numBlock,1):
-                    root.append(loc)
-                    yield from case_rec(numDel-1, loc, root)
+                for current in range(first, last, change):
+                    root.append(current)
+                    yield from case_rec(numDel-1, current , last, root)
                     del root[-1]
-        return case_rec(numDel)
+        if reverse == False:
+            change=1
+            return case_rec(numDel, 0, numBlock) 
+        else:
+            change=-1
+            return case_rec(numDel, numBlock-1, 0-1)
+    def caseGenFast(self, reverse = False):
+        """
+         Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
+         Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
+
+        Args:
+            numBlock: Number of blocks where deletions might occur.
+            numDel: Number of deletions.
+
+        Returns:
+            A generator of all possible indices where deletions might occur. 
+
+        Raises:
+            None
+        """
+        numBlock, numDel = self.numBlock, self.mlen-len(self.s)
+        def case_rec(first, last, idx=0, pprime=0):
+            """
+             A recursive method assiting the generation of deletion cases.
+
+            Args:
+                numDel: Number of deletions.
+                start: The first deletion index of the remaining deletion.
+                root: The base indices for each each guess.
+
+            Returns:
+                A generator of all possible indices where deletions might occur. 
+
+            Raises:
+                None
+            """
+            if idx != numDel-1:
+                for current in range(first, last, change):
+                    if current != first:
+                        pprime-=d[-1][current]
+                    root[idx] = current
+                    yield from case_rec(current, last, idx + 1, pprime)
+                    if idx==0 or current != first:
+                        pprime+=d[idx][current]
+            else:
+                for current in range(first, last, change):
+                    root[idx] = current
+                    if current != first:
+                        pprime-=d[-1][current]
+                    print(pprime)
+                    yield root
+                    if idx==0 or current != first:
+                        pprime+=d[idx][current]
+
+        d= self.baseCase2(numDel)
+        root=[0]*numDel
+        pprime=sum(d[-1])
+        if reverse == False:
+            change=1
+            return case_rec(0, numBlock, pprime=pprime) 
+        else:
+            change=-1
+            return case_rec(numBlock-1, -1, pprime=pprime)
     def rcaseGen(self, sidx, number=None):
         """
          Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
@@ -160,8 +223,64 @@ class Data:
         if number == None: number = self.numCase()
         count=[0]
         return case_rec(numDel)
+
+    def caseGenDistinctFast(self):
+        """
+         Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
+         Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
+
+        Args:
+            numBlock: Number of blocks where deletions might occur.
+            numDel: Number of deletions.
+
+        Returns:
+            A generator of all possible indices where deletions might occur. 
+
+        Raises:
+            None
+        """
+        numBlock, numDel = self.numBlock, self.mlen-len(self.s)
+        def case_rec(tempNumDel, pprime, start=-1, root=list()):
+            """
+             A recursive method assiting the generation of distinct deletion cases.
+
+            Args:
+                numDel: Number of deletions.
+                start: The first deletion index of the remaining deletion.
+                root: The base indices for each each guess.
+
+            Returns:
+                A generator of all possible indices where deletions might occur. 
+
+            Raises:
+                None
+            """
+            if tempNumDel < numDel:# and loc < numBlock-1:
+                for loc in range(numBlock-1, start, -1):
+                    root.append(loc)
+                    pprime+=d[tempNumDel-1][loc]*self.de.enVec[loc,:]
+                    #pprime-=d[tempNumDel-1][loc]
+                    #yield root, pprime
+                    yield from case_rec(tempNumDel+1, np.array(pprime), loc - 1, root)
+                    del root[-1]
+                    pprime-=d[tempNumDel][loc]*self.de.enVec[loc,:]
+                    #pprime+=d[tempNumDel][loc]
+            else:
+                for loc in range(numBlock-1, start, -1):
+                    root.append(loc)
+                    pprime+=d[tempNumDel-1][loc]*self.de.enVec[loc,:]
+                    #pprime-=d[tempNumDel-1][loc]
+                    yield root, pprime
+                    del root[-1]
+                    pprime-=d[tempNumDel][loc]*self.de.enVec[loc,:]
+                    #pprime+=d[tempNumDel][loc]
+        d= self.baseCase(numDel)
+        return case_rec(1, self.p - np.dot(d[0],self.de.enVec))
+        #return case_rec(1, sum(d[0]))
+
     def numCase(self):
         return self.table[self.numDel][self.numBlock]
+    
     def getTable(self):
         l=self.numBlock+1
         t = []
@@ -186,18 +305,82 @@ class Data:
         b = self.breakString(self.s, dels) # Bring the deleted sequence in to blocks of smaller binary strings with the deleted bits removed.
         i = self.bin2int(b) # convert each block in b into an equivalent integer.
         for d in dels: i[d]=0 # set the blocks that contain the deletion to zeros.
-        pi= np.concatenate((i,self.p)) # combine the list i with the list of parity.
-        r, valid =self.de.decode(pi, dels) # decode using a decoder, r is a list of candidates for the deleted value.
+        #print(i, dels)
+        r, valid =self.de.decode(i, self.p, dels) # decode using a decoder, r is a list of candidates for the deleted value.
         if not valid: return None# valid means it has passed the parity check.
         #print('Valid')
         r = self.int2bin(r) # converts the recovered deleted values to binary strings.
-        if not self.levCheck(r, b, dels): return None #Do the Levanshtein Distance check of the recovered deleted binary strings.
-        #print('Passed Lev')
+        for i in range(len(r)):
+            b[dels[i]]=r[i]
+        #if not self.levCheck(r, b, dels):
+        #    print('failed Lev')
+        #    return None #Do the Levanshtein Distance check of the recovered deleted binary strings.
         lastLen=self.mlen%self.blockLength
         b[-1]=b[-1][-lastLen:] # re-adjust the length of the last block in case of awkward mlen (not 2^x).
         #print('returned something')
         return ''.join(b) # return the sequence if all tests are passed.
 
+    def onedecode(self):
+
+        """
+            A recursive method assiting the generation of deletion cases. This is not memory and time efficient.
+
+        Args:
+            dels: A list of deltion indices.
+            de: A decoder that has a decode method.
+
+        Returns:
+            A binary string of the recovered sequence.
+        """
+        data = self.baseCase(1)
+        pprime = self.p - np.dot(data[0],self.de.enVec)
+        delBlock = self.numBlock - 1
+        for i in range(self.numBlock):
+            pprime+=data[0][delBlock]*self.de.enVec[delBlock,:]
+            #print(pprime,delBlock)
+            X, valid = self.de._onedel(pprime,delBlock)
+            if valid: break
+            pprime-=data[1][delBlock]*self.de.enVec[delBlock,:]
+            delBlock-=1
+        X = self.int2bin(X) # converts the recovered deleted values to binary strings.
+        left = delBlock*self.blockLength
+        right = (delBlock+1)*self.blockLength-1
+        if delBlock == self.numBlock-1:
+            lastLen=self.mlen%self.blockLength
+            X =  X[-lastLen:]
+        return self.s[:left] + X + self.s[right:] # return the sequence if all tests are passed.
+    def twodecode(self):
+
+        """
+            A recursive method assiting the generation of deletion cases. This is not memory and time efficient.
+
+        Args:
+            dels: A list of deltion indices.
+            de: A decoder that has a decode method.
+
+        Returns:
+            A binary string of the recovered     sequence.
+        """
+        cases = self.caseGenDistinctFast()
+        for case in cases:
+            d = case[0]
+            pprime = case[1]
+            if len(d) ==1: X, valid = self.de._onedel(pprime,d[0])
+            else: X, valid = self.de._twodels(pprime,d)
+            #print(pprime, d)
+            if valid:
+                #print("valid")
+                X = self.int2bin(X) # converts the recovered deleted values to binary strings. 
+                for i in range(len(d)):
+                    left = d[i]*self.blockLength
+                    right = (d[i]+1)*self.blockLength-(3-len(d))
+                    if d[i] == self.numBlock-1:
+                        lastLen=self.mlen%self.blockLength
+                        X[i] =  X[i][-lastLen:]
+                    self.s = self.s[:left] + X[i] + self.s[right:] # return the sequence if all tests are passed.
+                    #print(self.s)
+                return self.s
+        raise DecodingError
     def int2bin(self, num):
         """
          Converts an integer or a list of integers to binary strings with zeros left filled to make them blockLength size.
@@ -208,14 +391,32 @@ class Data:
         Returns:
             A binary string or a list of binary strings with zeros left filled to make them blockLength size
         """
-        if type(num) == int:
+        if type(num) != list:
             return bin(int(num))[2:].zfill(self.blockLength)
         else:#list
             output=[]
             for n in num:
                 output.append(bin(int(n))[2:].zfill(self.blockLength))
             return output
-            
+    def baseCase(self, numDel=1):
+        lst = []
+        lst.append(self.bin2int(self.breakString(self.s, [self.numBlock-1]))) # convert each block in b into an equivalent integer.
+        for i in range(1, numDel+1):
+            lst.append(self.bin2int(self.breakString(self.s, list(range(i)))))
+            for j in range(i):
+                lst[-1][j]=0
+        return lst
+    def baseCase2(self, numDel=1):
+        dels=[self.numBlock-1]*self.numDel
+        lst = []
+        lst.append(self.bin2int(self.breakString(self.s, dels))) # convert each block in b into an equivalent integer.
+        lst[-1][self.numBlock-1]=0
+        for i in range(self.numDel):
+            dels[i]=0
+            lst.append(self.bin2int(self.breakString(self.s, dels)))
+            for j in set(dels):
+                lst[-1][j]=0
+        return lst
     @staticmethod
     def bin2int(b):
         """
