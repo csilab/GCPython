@@ -25,23 +25,22 @@
     <Compile Include="Consumer.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Data.py">
+    <Compile Include="Decoder.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Decoder.py">
+    <Compile Include="Backups\Decoder.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Encoder.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="GC - Backup.py" />
+    <Compile Include="Backups\GC - Backup.py" />
+    <Compile Include="Backups\GC - Backup 2.py" />
     <Compile Include="GC.py" />
-    <Compile Include="GCdet.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Simulator.py">
-      <SubType>Code</SubType>
-    </Compile>
+    <Compile Include="Backups\GCdet - Backup.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Backups\" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
