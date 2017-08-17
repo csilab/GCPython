@@ -17,11 +17,10 @@ class Decoder(Encoder):
     def caseGen(self, reverse = False):
         """
          Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
-         Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
+         Notice this call does not use too much time and memory because it returns a generator instead of a actual list deletion cases.
 
         Args:
-            numBlock: Number of blocks where deletions might occur.
-            numDel: Number of deletions.
+            reverse: if true, generates cases in a reverse order.
 
         Returns:
             A generator of all possible indices where deletions might occur. 
@@ -65,14 +64,15 @@ class Decoder(Encoder):
         """
          Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
          Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
-
+         In addition, this also maintains P', which is a array of Parity minus known quantities on the left when solving the systems of equations.
+        
         Args:
-            numBlock: Number of blocks where deletions might occur.
-            numDel: Number of deletions.
-
+            s: the deleted binary string
+            p: the parities
+            reverse: if true, generates cases in the reverse order (not tested)
         Returns:
-            A generator of all possible indices where deletions might occur. 
-
+            root: a list of deletion indices 
+            pprime: p'
         Raises:
             None
         """
@@ -116,7 +116,6 @@ class Decoder(Encoder):
                     root[idx] = current
                     if current != first:
                         pprime+=d[-1][current]*self.enVec[current,:]
-                    #print(pprime, root)
                     yield root, pprime
                     if idx==0 or current != first:
                         pprime-=d[idx][current]*self.enVec[current,:]
@@ -133,10 +132,11 @@ class Decoder(Encoder):
         """
          Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
          Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
+         This is used to distribute cases in multiprocessing.
 
         Args:
-            numBlock: Number of blocks where deletions might occur.
-            numDel: Number of deletions.
+            sidx: the index of the first case a process is taking care of.
+            number: the number of cases from the first index.
 
         Returns:
             A generator of all possible indices where deletions might occur. 
@@ -197,59 +197,6 @@ class Decoder(Encoder):
         if number == None: number = self.numCase()
         count=[0]
         return case_rec(numDel)
-    def caseGenDistinctFast(self):
-        """
-         Return a GENERATOR of all possible indices where deletions might occur. Example, [[0], [1], [2], [3]] is the result of calling case(numBlock=4, numDel=1).
-         Notice this call does not use too much memory because it return a generator instead of a actual list. It is also less time consumming.
-
-        Args:
-            numBlock: Number of blocks where deletions might occur.
-            numDel: Number of deletions.
-
-        Returns:
-            A generator of all possible indices where deletions might occur. 
-
-        Raises:
-            None
-        """
-        numBlock, numDel = self.numBlock, self.mlen-len(s)
-        def case_rec(tempNumDel, pprime, start=-1, root=list()):
-            """
-             A recursive method assiting the generation of distinct deletion cases.
-
-            Args:
-                numDel: Number of deletions.
-                start: The first deletion index of the remaining deletion.
-                root: The base indices for each each guess.
-
-            Returns:
-                A generator of all possible indices where deletions might occur. 
-
-            Raises:
-                None
-            """
-            if tempNumDel < numDel:# and loc < numBlock-1:
-                for loc in range(numBlock-1, start, -1):
-                    root.append(loc)
-                    pprime+=d[tempNumDel-1][loc]*self.enVec[loc,:]
-                    #pprime-=d[tempNumDel-1][loc]
-                    #yield root, pprime
-                    yield from case_rec(tempNumDel+1, np.array(pprime), loc - 1, root)
-                    del root[-1]
-                    pprime-=d[tempNumDel][loc]*self.enVec[loc,:]
-                    #pprime+=d[tempNumDel][loc]
-            else:
-                for loc in range(numBlock-1, start, -1):
-                    root.append(loc)
-                    pprime+=d[tempNumDel-1][loc]*self.enVec[loc,:]
-                    #pprime-=d[tempNumDel-1][loc]
-                    yield root, pprime
-                    del root[-1]
-                    pprime-=d[tempNumDel][loc]*self.enVec[loc,:]
-                    #pprime+=d[tempNumDel][loc]
-        d= self.baseCase(numDel)
-        return case_rec(1, p - np.dot(d[0],self.enVec))
-        #return case_rec(1, sum(d[0]))
     @staticmethod
     def levCheck(r, b, dels):
         """
@@ -337,26 +284,31 @@ class Decoder(Encoder):
         return ''.join(b) # return the sequence if all tests are passed.
     def decode(self, s, p):
         """
-            A recursive method assiting the generation of deletion cases. This is not memory and time efficient.
+            A decoding manager, which calls the appropriate functions based on the number of distinct deletions.
 
         Args:
-            dels: A list of deltion indices.
-            de: A decoder that has a decode method.
+            s: the deleted binary sequence
+            p: the parities
 
         Returns:
-            A binary string of the recovered     sequence.
+            A binary string of the recovered sequence.
+
+        Raises:
+            DecodingError: no valid case -> there must be somehthinf wrong witht the decoder.
         """
         cases = self.caseGenFast(s, p)
+        if self.numDel == 1: solver = self._solve1
+        elif self.numDel == 2: solver = self._solve2
         for case in cases:
             dels = case[0]
             #ddels = dels
             #ddels = sorted(list(set(dels)))
-            #pprime = case[1]
+            pprime = case[1]
             #if len(ddels) == 1:
             #    X, valid = self._solve1(pprime,ddels[0])
             #else:
             #    X, valid = self._solve2(pprime, ddels)
-            X, valid = self._solve2(case[1], dels)
+            X, valid = solver(pprime, dels)
             if valid:
                 cdels = {d:dels.count(d) for d in dels}
                 X = self.int2bin(X) # converts the recovered deleted values to binary strings. 
@@ -373,30 +325,83 @@ class Decoder(Encoder):
         raise DecodingError
 
     def solve1(self, data , parity, dels):
-        '''cX + sumknown = p0
-            X = (p0-sumknown)*cInverse
-        Where:
-            X = deletion integer
-            sumknown = np.inner(data,dvec)
-            p0 = parity[0]
-            cInverse = self.gfdiv(dvec[dels[0]])
-        '''
+        """
+            Preperation of one deletion solver.
+
+        Args:
+            data: a list if integers representing a guess.
+            parity: the parities
+            dels: a list of deletion indices, received from a case generator.
+
+        Returns:
+            [X]: A list of integers representing recover sub-sequence.
+            valid: whether the recover integer has passed the parity check.
+
+        """
         pprime = parity - np.dot(data,self.enVec)
         return _solve1(pprime, dels[0])
     def _solve1(self, pprime, dels):
+        '''
+            One deletion solver (Cramer's rules)
+            cX + sumknown = p0
+            X = (p0-sumknown)*gfinv(c)
+            X = pprime*gfinv(c)
+
+        Args:
+            pprime: a list of parity - known quantities on the left.
+            dels: a list of deletion indices, received from a case generator.
+
+        Returns:
+            [X]: A list of integers representing recover sub-sequence.
+            valid: whether the recovered integer has passed the parity check.
+            
+        '''
         def isvalid():
             '''Check the validity of the result against the checker parities.'''
             for i in range(1, len(pprime)):
                 valid = ((self.enVec[dels][i] * float(X)) - pprime[i])%self.gf == 0
                 if not valid: break
             return valid
+        dels=dels[0]
         X = self.gfdiv(self.enVec[dels][0], pprime[0])
         #print(pprime, dels, X, self.gfdiv(self.enVec[dels][0]))
-        return [X], isvalid()
+        if isvalid():
+            
+            return [X], True
+        else:
+            return None, False
     def solve2(self, data, parity, dels):
+        """
+            Preperation of two deletion solver.
+
+        Args:
+            data: a list if integers representing a guess.
+            parity: the parities
+            dels: a list of deletion indices, received from a case generator.
+
+        Returns:
+            [X1, X2]: A list of integers representing recover sub-sequence.
+            valid: whether the recover integer has passed the parity check.
+
+        """
         pprime = parity - np.dot(data,self.enVec)
         return _solve2(pprime, dels)
     def _solve2(self, pprime, dels):
+        '''
+            Two deletion solver (Cramer's rules)
+            cX + sumknown = p0
+            X = (p0-sumknown)*gfinv(c)
+            X = pprime*gfinv(c)
+
+        Args:
+            pprime: a list of parity - known quantities on the left.
+            dels: a list of deletion indices, received from a case generator.
+
+        Returns:
+            [X1, X2]: A list of integers representing recover sub-sequence.
+            valid: whether the recovered integer has passed the parity check.
+            
+        '''
         def isvalid():
             '''Check the validity of the result against the checker parities.'''
             for i in range(2, self.numVec):
@@ -412,4 +417,7 @@ class Decoder(Encoder):
         detX2 = (pprime[1]*self.enVec[dels[0]][0])-(pprime[0]*self.enVec[dels[0]][1])
         X2 = detX2*idetA%self.gf
         #if X2 >= self.maxVal: return None, False
-        return [X1, X2], isvalid()
+        if isvalid():
+            return [X1, X2], True
+        else:
+            return None, False

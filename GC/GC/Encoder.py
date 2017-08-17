@@ -1,25 +1,66 @@
 import numpy as np
 from math import ceil, log, sqrt
 class GF(object):
+    '''Contains variable, methods to calculate, converse numbers in a finite field'''
     def __init__(self, mlen, lengthExtension=1):
+        """
+         Initialize a finite field as a base for an encoder/decoder.
+
+        Args:
+            mlen: the bit length of a complete message,
+            lengthExtension: the multitple of the base blocklength (increasing block length means faster decoding)
+        """
         self.numBlock, self.blockLength = self.getDem(mlen, lengthExtension)
         self.gf = self.nextPrime(2**self.blockLength)
-        self.gfMinus2 = self.gf-2
+        self.gfMinus2 = self.gf-2 #to save calculation when finding gf division (inversion).
         self.mlen = mlen
-    def isPrime(self, num):
-         if num < 2: return False
-         for i in range(2, int(sqrt(num)) + 1):
-             if num % i == 0:
-                 return False
-         return True
+
     def nextPrime(self, num):
-        while self.isPrime(num) is False: num+=1
+        """
+        Returns the smallest prime number that is greater than or equal to num.
+
+        Args:
+            num: the input number.
+
+        Returns:
+            Returns the smallest prime number that is greater than or equal to num.
+        """
+        def isPrime():
+            """
+            Check whether a number is a prime number.
+
+            Args:
+                num: the input number
+
+            Returns:
+                True if num is a prime number.
+                Flase if num is NOT a prime number.
+            """
+            if num < 2: return False
+            for i in range(2, int(sqrt(num)) + 1):
+                if num % i == 0:
+                    return False
+            return True
+        while isPrime() is False: num+=1
         return num
     def gfdiv(self, den, num = 1):
-        inv = pow(int(den), self.gfMinus2, self.gf) #int64 type does not work with pow
+        """
+        Returns the  result of a devision (num/den) in GF.
+
+        Args:
+            num: the numerator, num is set to 1 by default, which is equivalent to an GF inversion.
+            den: the denominator.
+
+        Returns:
+            Returns the  result of a devision (num/den) in GF.
+        """
+        inv = pow(int(den), self.gfMinus2, self.gf) #the first parameter of pow must a Python int. int64 type of Numpy does not work.
         if num == 1: return inv
         else: return (num*inv)%self.gf
-    def getgfdict(self):
+    def getgfdict(self):#not in C
+        """
+        Returns a GF inversion table containing pairs of number and its inversion in a given GF.
+        """
         d={}
         p = self.gf
         for x in range(1, self.gf):
@@ -30,21 +71,21 @@ class GF(object):
         d[0]=None
         return d
     @staticmethod
-    def getDem(k, lengthExtension=1): #k == original message length
+    def getDem(mlen, lengthExtension=1): #k == original message length
         """
          Return the number of blocks and the bit length of each block for a given total bit length k.
 
         Args:
             k: the total bit length of a sequence.
-
+            lengthExtension: the multitple of the base blocklength (increasing block length means faster decoding)
         Returns:
             blockLength: the ceiling of log k based 2.
             numBlock: the ceiling of k devided by blockLength.
         """
         if lengthExtension <=0: raise InvalidBlockLength()
-        blockLength=lengthExtension*int(ceil(log(k,2))) #round up
-        if blockLength > k: raise TooLongBlocks
-        numBlock=int(ceil(k/blockLength))#round up
+        blockLength=lengthExtension*int(ceil(log(mlen,2))) #round up
+        if blockLength > mlen: raise TooLongBlocks
+        numBlock=int(ceil(mlen/blockLength))#round up
         return numBlock, blockLength
     def __str__(self):
         return 'numBlock ({}), blockLength ({}), gf({})'.format(self.numBlock, self.blockLength,self.gf)
@@ -56,6 +97,17 @@ class Encoder(GF):
         self.numVec=numVec
         self.enVec=self.getEnVec(numVec)
     def getEnVec(self, numVec, type='cauchy'):
+        """
+        Returns encoding/decoding matrix.
+
+        Args:
+            numVec: number of column = # decoding parities + # checker parities
+            type: if type is 'cauchy', return a cauchy matrix; otherwise, return a 'all one' matrix.
+
+
+        Returns:
+            Returns encoding/decoding matrix.
+        """
         def allone():
             '''the last rows are zeros'''
             length=self.numBlock
@@ -67,12 +119,21 @@ class Encoder(GF):
                 e[...] = self.gfdiv(e)
         if type!='cauchy': return allone()
         x = np.array(range(self.numBlock), np.int64)
-        y = np.array(range(self.numBlock,self.numBlock+numVec), np.int64)
+        y = np.array(range(self.numBlock,self.numBlock+numVec), np.int64) #number of rows is the same as the number of blocks
         A=(x.reshape((-1,1)) - y)%self.gf
         inv(A)
         #A[self.numBlock:,:]=[0]
         return A%self.gf
     def paritize(self, data):
+        """
+        Returns a list of parities (done in sender's side).
+
+        Args:
+            data: the original binary sequence or a list of integers representing the original binary sequence.
+
+        Returns:
+            Returns a list of parities.
+        """
         if type(data) == str:
             data = np.array(self.bin2int(self.breakString(data)), dtype=np.int64)
         p= np.dot(data, self.enVec[:len(data),:])%self.gf
@@ -138,7 +199,18 @@ class Encoder(GF):
                 output.append(bin(int(n))[2:].zfill(self.blockLength))
             return output
     @staticmethod
-    def pop(inputString,idx):
+    def pop(inputString, idx):
+        """
+        Returns the input binary string with bits at indices specified by idx removed.
+        Used to generate a deleted sequence to feed the simulation.
+
+        Args:
+            inputString: the input string.
+            idx: indices of the deleted bits.
+
+        Returns:
+            Returns the input binary string with bits at indices specified by idx removed.
+        """
         if type(idx)==int: idx=[idx]
         chars = [c for c in inputString]
         for i in sorted(idx, reverse=True):
@@ -146,7 +218,17 @@ class Encoder(GF):
         return ''.join(chars)
     @staticmethod
     def genMsg(dataInt, mLen):
-        '''\return a tuple of original message and deleted message'''
+        """
+        Convert an a decimal number to its binary representation.
+
+        Args:
+            dataInt: the input decimal.
+            mLen: the size of the result binary string.
+
+        Returns:
+            An equivalent binary representation of the input decimal.
+        """
+   
         if dataInt>2**mLen: raise TooShortLength
         orim = bin(dataInt)[2:].zfill(mLen)
         return orim

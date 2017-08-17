@@ -5,13 +5,14 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>3eb283bb-0d64-42de-af0c-c0e1429e49b8</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>GC.py</StartupFile>
+    <StartupFile>demo.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <Name>GC</Name>
     <RootNamespace>GC</RootNamespace>
+    <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -36,7 +37,8 @@
     </Compile>
     <Compile Include="Backups\GC - Backup.py" />
     <Compile Include="Backups\GC - Backup 2.py" />
-    <Compile Include="GC.py" />
+    <Compile Include="demo.py" />
+    <Compile Include="Backups\GC - Backup 3.py" />
     <Compile Include="Backups\GCdet - Backup.py" />
   </ItemGroup>
   <ItemGroup>
