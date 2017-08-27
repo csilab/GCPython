@@ -29,7 +29,6 @@ def Simulation(n=1, mlen=16, numDel=1, numChecker=2, f=10, lengthExtension=0):
     """
     def sequential():
         de=Decoder(mlen, numDel, numChecker, lengthExtension)
-
         ttime = 0
         count=0
         for num in orange:
